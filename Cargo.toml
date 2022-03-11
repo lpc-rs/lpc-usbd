@@ -14,5 +14,5 @@ vcell = "0.1.2"
 cortex-m = "0.7.1"
 usb-device = "0.2.8"
 
-#[dev-dependencies]
-#lpc546xx-hal = { version = "0.2.0", features = ["mcu-LPC54608J512ET180"] }
+[dev-dependencies]
+lpc546xx-hal = { version = "0.2.0", features = ["mcu-LPC54608J512ET180"] }
