@@ -28,5 +28,5 @@ jobs:
       - name: Check code
         run: cargo check
 
-      - name: Check examples // wait until lpc546xx-hal 0.2.0 is published
+      - name: Check examples
         run: cargo check --examples
