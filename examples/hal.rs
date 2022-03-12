@@ -48,9 +48,7 @@ impl USB {
         // disable clocks for clock setup
         usb_dev.disable_clock(syscon);
         // usb clock = mainclk / 2 (because mainclock == 96MHz)
-        syscon_raw
-            .usb0clkdiv
-            .modify(|_, w| unsafe { w.div().bits(1) });
+        syscon_raw.usb0clkdiv.modify(|_, w| unsafe { w.div().bits(1) });
         // run clock
         syscon_raw.usb0clkdiv.modify(|_, w| w.halt().clear_bit());
         // select FRO HF as source (96 MHz)
@@ -67,9 +65,7 @@ impl USB {
         // enable device mode in host controller (?)
         syscon_raw.ahbclkctrl2.modify(|_, w| w.usb0hsl().set_bit());
         usbh.portmode.modify(|_, w| w.dev_enable().set_bit());
-        syscon_raw
-            .ahbclkctrl2
-            .modify(|_, w| w.usb0hsl().clear_bit());
+        syscon_raw.ahbclkctrl2.modify(|_, w| w.usb0hsl().clear_bit());
         Self { usb_dev, usb_host }
     }
 }
