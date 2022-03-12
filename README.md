@@ -1,6 +1,6 @@
 [![crates.io](https://img.shields.io/crates/d/lpc-usbd.svg)](https://crates.io/crates/lpc-usbd)
 [![crates.io](https://img.shields.io/crates/v/lpc-usbd.svg)](https://crates.io/crates/lpc-usbd)
-![Build Status](https://github.com/lpc-rs/lpc-usbd/workflows/CI/badge.svg)
+[![Build Status](https://github.com/lpc-rs/lpc-usbd/actions/workflows/ci.yml/badge.svg)](https://github.com/lpc-rs/lpc-usbd/actions/workflows/ci.yml)
 
 # `lpc-usbd`
 

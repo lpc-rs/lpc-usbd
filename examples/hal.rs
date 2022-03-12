@@ -1,8 +1,6 @@
 #![no_main]
 #![no_std]
 
-use defmt_rtt as _;
-use panic_probe as _;
 use usb_device::{
     device::{UsbDeviceBuilder, UsbVidPid},
     test_class::TestClass,
@@ -11,12 +9,15 @@ use usb_device::{
 use core::ops::Deref;
 
 use lpc546xx_hal::{
-    pac::{self, SYSCON, USB0, USBFSH},
+    pac::{self},
     prelude::*,
     syscon::{ClockControl, Config, Syscon},
 };
 use lpc_usbd::{self, bus::UsbBus, UsbPeripheral};
-//pub use lpc_usbd::UsbBus;
+
+use defmt_rtt as _;
+use panic_probe as _;
+
 use cortex_m_rt::entry;
 
 pub struct USB {
@@ -44,31 +45,32 @@ impl USB {
         pac::USB0: ClockControl,
     {
         let syscon_raw = unsafe { &*pac::SYSCON::ptr() };
-        defmt::trace!("new_usb");
-        cortex_m::asm::delay(100000);
-        usb_dev.enable_clock(syscon);
+        // disable clocks for clock setup
+        usb_dev.disable_clock(syscon);
+        // usb clock = mainclk / 2 (because mainclock == 96MHz)
         syscon_raw.usb0clkdiv.modify(|_, w| unsafe { w.div().bits(1) });
+        // run clock
         syscon_raw.usb0clkdiv.modify(|_, w| w.halt().clear_bit());
+        // select FRO HF as source (96 MHz)
         syscon_raw.usb0clksel.modify(|_, w| w.sel().fro_hf());
+        // wait for request done
         while syscon_raw.usb0clkdiv.read().reqflag().bit_is_set() {}
+        // enable clocks
+        usb_dev.enable_clock(syscon);
+        // enable USB1RAM
         syscon_raw.ahbclkctrl2.modify(|_, w| w.usb1ram().set_bit());
-        defmt::info!("clock: {:?}", usb_dev.get_clock_freq(syscon).unwrap().0);
-
-        cortex_m::asm::delay(100000);
+        // check clk source
+        //defmt::info!("clock: {:?}",usb_dev.get_clock_freq(syscon).unwrap().0);
+        let usbh = unsafe { &*pac::USBFSH::ptr() };
+        // enable device mode in host controller (?)
+        syscon_raw.ahbclkctrl2.modify(|_, w| w.usb0hsl().set_bit());
+        usbh.portmode.modify(|_, w| w.dev_enable().set_bit());
+        syscon_raw.ahbclkctrl2.modify(|_, w| w.usb0hsl().clear_bit());
         Self { usb_dev, usb_host }
     }
 }
 
 unsafe impl Sync for USB {}
-
-// impl<USB: UsbPeripheral> core::ops::Deref for UsbRegisters<USB> {
-//     type Target = RegisterBlock;
-
-//     fn deref(&self) -> &Self::Target {
-//         let ptr = USB::REGISTERS as *const Self::Target;
-//         unsafe { &*ptr }
-//     }
-// }
 
 impl Deref for USB {
     type Target = lpc_usbd::pac::usb::RegisterBlock;
@@ -80,32 +82,6 @@ impl Deref for USB {
 }
 impl UsbPeripheral for USB {
     const REGISTERS: *const () = pac::USB0::ptr() as *const ();
-    fn enable() {
-        cortex_m::asm::delay(100000);
-        defmt::trace!("enable");
-        cortex_m::asm::delay(100000);
-        let usbd = unsafe { &*pac::USB0::ptr() };
-        cortex_m::asm::delay(100000);
-        let usbh = unsafe { &*pac::USBFSH::ptr() };
-        cortex_m::asm::delay(100000);
-        let syscon = unsafe { &*pac::SYSCON::ptr() };
-        defmt::trace!("clkctrl2");
-        cortex_m::asm::delay(100000);
-        //syscon.ahbclkctrl2.modify(|_, w| w.usb0hsl().set_bit());
-        cortex_m::asm::delay(100000);
-        defmt::trace!("portmode");
-        usbh.portmode.modify(|_, w| w.dev_enable().set_bit());
-        cortex_m::asm::delay(100000);
-        syscon.ahbclkctrl2.modify(|_, w| w.usb0hsl().clear_bit());
-
-        // cortex_m::interrupt::free(|_| unsafe {
-        //     // Enable USB peripheral
-        //     pac::OTG_FS_GLOBAL::enable_unchecked();
-
-        //     // Reset USB peripheral
-        //     pac::OTG_FS_GLOBAL::reset_unchecked();
-        // });
-    }
 
     const SPEED: lpc_usbd::UsbSpeed = lpc_usbd::UsbSpeed::FullSpeed;
 }
@@ -115,13 +91,11 @@ impl UsbPeripheral for USB {
 #[entry]
 fn main() -> ! {
     let dp = lpc546xx_hal::pac::Peripherals::take().unwrap();
-    defmt::info!("freezing!");
-    cortex_m::asm::delay(100000);
     let mut syscon = dp.SYSCON.freeze(Config::frohf_96mhz());
     let mut iocon = dp.IOCON;
     let gpio = dp.GPIO.split(&mut syscon, &mut iocon);
-    //let mut vbus_pin = gpio.pio0_22;
-    //vbus_pin.set_alt_mode(lpc546xx_hal::gpio::AltMode::FUNC7);
+    let vbus_pin = gpio.pio0_22;
+    vbus_pin.set_alt_mode(lpc546xx_hal::gpio::AltMode::FUNC7);
     let usb = USB::new(dp.USB0, dp.USBFSH, &mut syscon);
     let usb_bus = UsbBus::new(usb);
 
@@ -139,11 +113,8 @@ fn main() -> ! {
         .max_packet_size_0(64)
         .build();
 
-    defmt::info!("polling");
-
     loop {
         if usb_dev.poll(&mut [&mut test]) {
-            defmt::info!("data!");
             test.poll();
         }
     }
